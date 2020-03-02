@@ -66,7 +66,7 @@ export ERLANG_MK_TMP
 
 # "erl" command.
 
-ERL = erl +A0 -noinput -boot start_clean
+ERL = erl +A0 -noinput -boot no_dot_erlang
 
 # Platform detection.
 
@@ -175,7 +175,7 @@ $(ERL) $2 -pz $(ERLANG_MK_TMP)/rebar/ebin -eval "$(subst $(newline),,$(call esca
 endef
 
 ifeq ($(PLATFORM),msys2)
-core_native_path = $(subst \,\\\\,$(shell cygpath -w $1))
+core_native_path = $(shell cygpath -m $1)
 else
 core_native_path = $1
 endif
@@ -185,7 +185,7 @@ core_http_get = curl -Lf$(if $(filter-out 0,$(V)),,s)o $(call core_native_path,$
 core_eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 
 # We skip files that contain spaces because they end up causing issues.
-core_find = $(if $(wildcard $1),$(shell find $(1:%/=%) -type f -name $(subst *,\*,$2) | grep -v " "))
+core_find = $(if $(wildcard $1),$(shell find $(1:%/=%) \( -type l -o -type f \) -name $(subst *,\*,$2) | grep -v " "))
 
 core_lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$(1)))))))))))))))))))))))))))
 

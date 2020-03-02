@@ -71,7 +71,7 @@ eunit-apps-include-lib: init
 	$t $(MAKE) -C $(APP) $v
 
 	$i "Run eunit"
-	$t $(MAKE) -C $(APP) $v
+	$t $(MAKE) -C $(APP) eunit $v
 
 	$i "Distclean the application"
 	$t $(MAKE) -C $(APP) distclean $v
@@ -81,6 +81,25 @@ eunit-apps-include-lib: init
 
 	$i "Distclean the application"
 	$t $(MAKE) -C $(APP) distclean $v
+
+eunit-apps-include-lib-deps: init
+
+	$i "Bootstrap a new OTP library named $(APP)"
+	$t mkdir $(APP)/
+	$t cp ../erlang.mk $(APP)/
+	$t $(MAKE) -C $(APP) -f erlang.mk bootstrap-lib $v
+
+	$i "Create new library the_app"
+	$t $(MAKE) -C $(APP) new-lib in=the_app $v
+
+	$i "Add Cowlib to the list of dependencies of the_app"
+	$t perl -ni.bak -e 'print;if ($$.==1) {print "DEPS = cowlib\ndep_cowlib_commit = master\n"}' $(APP)/apps/the_app/Makefile
+
+	$i "Generate .erl file that uses include_lib()"
+	$t echo '-module(the).  -include_lib("cowlib/include/cow_parse.hrl").  -export([thing/0]).  thing() -> true.' > $(APP)/apps/the_app/src/the.erl
+
+	$i "Run eunit"
+	$t $(MAKE) -C $(APP) eunit $v
 
 eunit-apps-one-app-tested: init
 
@@ -312,7 +331,7 @@ eunit-test-dir: init
 		"-module($(APP))." \
 		"-ifdef(TEST)." \
 		"-include_lib(\"eunit/include/eunit.hrl\")." \
-		"log_test() -> os:cmd(\"echo $(APP) >> eunit.log\")." \
+		"log_test() -> file:write_file(\"eunit.log\", \"$(APP)\n\", [append])." \
 		"-endif." > $(APP)/src/$(APP).erl
 
 	$i "Generate a module containing EUnit tests in TEST_DIR"
@@ -320,7 +339,7 @@ eunit-test-dir: init
 	$t printf "%s\n" \
 		"-module($(APP)_tests)." \
 		"-include_lib(\"eunit/include/eunit.hrl\")." \
-		"log_test() -> os:cmd(\"echo $(APP)_tests >> eunit.log\")." > $(APP)/test/$(APP)_tests.erl
+		"log_test() -> file:write_file(\"eunit.log\", \"$(APP)_tests\n\", [append])." > $(APP)/test/$(APP)_tests.erl
 
 	$i "Check that EUnit runs both tests"
 	$t $(MAKE) -C $(APP) eunit | grep -c "2 tests passed." | grep -q 1

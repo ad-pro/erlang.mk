@@ -27,6 +27,31 @@ core-app-appsrc-change: init
 	$t rm $(APP)/EXPECT
 endif
 
+core-app-appup: init
+
+	$i "Bootstrap a new OTP library named $(APP)"
+	$t mkdir $(APP)/
+	$t cp ../erlang.mk $(APP)/
+	$t $(MAKE) -C $(APP) -f erlang.mk bootstrap-lib $v
+
+	$i "Generate a .appup file"
+	$t touch $(APP)/src/$(APP).appup
+
+	$i "Build the application"
+	$t $(MAKE) -C $(APP) $v
+
+	$i "Check that the appup file was copied into ebin/"
+	$t test -f $(APP)/ebin/$(APP).appup
+
+	$i "Clean the application"
+	$t $(MAKE) -C $(APP) clean $v
+
+	$i "Check that the source file still exists"
+	$t test -f $(APP)/src/$(APP).appup
+
+	$i "Check that the file copied into ebin/ was removed"
+	$t test ! -e $(APP)/ebin/$(APP).appup
+
 core-app-asn1: init
 
 	$i "Bootstrap a new OTP library named $(APP)"
@@ -376,6 +401,31 @@ core-app-erlc-opts-filter: init
 		[{module, M} = code:load_file(M) || M <- Mods], \
 		false = proplists:is_defined(debug_info, proplists:get_value(options, boy:module_info(compile))), \
 		false = proplists:is_defined(debug_info, proplists:get_value(options, girl:module_info(compile))), \
+		halt()"
+
+core-app-erlc-symlink: init
+
+	$i "Bootstrap a new OTP library named $(APP)"
+	$t mkdir $(APP)/
+	$t cp ../erlang.mk $(APP)/
+	$t $(MAKE) -C $(APP) -f erlang.mk bootstrap-lib $v
+
+	$i "Generate .erl files"
+	$t echo "-module(boy)." > $(APP)/src/boy.erl
+	$t echo "-module(girl)." > $(APP)/girl.erl
+
+	$i "Symlink .erl file"
+	$t ln -s ../girl.erl $(APP)/src/girl.erl
+
+	$i "Build the application"
+	$t $(MAKE) -C $(APP) $v
+
+	$i "Check that the application was compiled correctly"
+	$t $(ERL) -pa $(APP)/ebin/ -eval " \
+		ok = application:start($(APP)), \
+		{ok, Mods = [boy, girl]} \
+			= application:get_key($(APP), modules), \
+		[{module, M} = code:load_file(M) || M <- Mods], \
 		halt()"
 
 core-app-error: init
@@ -2410,6 +2460,7 @@ core-app-hrl-deps: init
 	$t $(MAKE) -C $(APP) new-lib in=my_app $v
 
 	$t echo "DEPS = cowlib" > $(APP)/apps/my_app/Makefile
+	$t echo "dep_cowlib_commit = master" >> $(APP)/apps/my_app/Makefile
 	$t echo "include ../../erlang.mk" >> $(APP)/apps/my_app/Makefile
 	$t printf "%s\n" "-module(boy)." "-include_lib(\"cowlib/include/cow_inline.hrl\")." > $(APP)/apps/my_app/src/boy.erl
 	$t printf "%s\n" "-module(girl)." > $(APP)/apps/my_app/src/girl.erl

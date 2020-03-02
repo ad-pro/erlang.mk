@@ -32,11 +32,11 @@ else
 #
 # $(ALL_DEPS_DIRS) includes $(BUILD_DEPS).
 
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_DOC_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_REL_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_TEST_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(LOCAL_DEPS_DIRS) $(ALL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): $(LOCAL_DEPS_DIRS) $(ALL_DEPS_DIRS) $(ALL_DOC_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): $(LOCAL_DEPS_DIRS) $(ALL_DEPS_DIRS) $(ALL_REL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): $(LOCAL_DEPS_DIRS) $(ALL_DEPS_DIRS) $(ALL_TEST_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): $(LOCAL_DEPS_DIRS) $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
 
 # Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
 # dependencies with a single target.
@@ -53,7 +53,7 @@ ifneq ($(filter shell,$(DEP_TYPES)),)
 $(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_SHELL_DEPS_DIRS)
 endif
 
-ERLANG_MK_RECURSIVE_TMP_LIST := $(abspath $(ERLANG_MK_TMP)/recursive-tmp-deps.log)
+ERLANG_MK_RECURSIVE_TMP_LIST := $(abspath $(ERLANG_MK_TMP)/recursive-tmp-deps-$(shell echo $$PPID).log)
 
 $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
@@ -62,13 +62,6 @@ $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): | $(ERLANG_MK_TMP)
 ifeq ($(IS_APP)$(IS_DEP),)
 	$(verbose) rm -f $(ERLANG_MK_RECURSIVE_TMP_LIST)
-endif
-ifndef IS_APP
-	$(verbose) set -e; for dep in $(ALL_APPS_DIRS) ; do \
-		$(MAKE) -C $$dep $@ \
-		 IS_APP=1 \
-		 ERLANG_MK_RECURSIVE_TMP_LIST=$(ERLANG_MK_RECURSIVE_TMP_LIST); \
-	done
 endif
 	$(verbose) set -e; for dep in $^ ; do \
 		if ! grep -qs ^$$dep$$ $(ERLANG_MK_RECURSIVE_TMP_LIST); then \
@@ -82,7 +75,11 @@ endif
 		fi \
 	done
 ifeq ($(IS_APP)$(IS_DEP),)
-	$(verbose) sort < $(ERLANG_MK_RECURSIVE_TMP_LIST) | uniq > $@
+	$(verbose) sort < $(ERLANG_MK_RECURSIVE_TMP_LIST) | \
+		uniq > $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted
+	$(verbose) cmp -s $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted $@ \
+		|| mv $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted $@
+	$(verbose) rm -f $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted
 	$(verbose) rm $(ERLANG_MK_RECURSIVE_TMP_LIST)
 endif
 endif # ifneq ($(SKIP_DEPS),)

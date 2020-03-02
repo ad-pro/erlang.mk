@@ -174,6 +174,72 @@ core-deps-dep-built-full: init
 	$t find $(APP)/deps/cowlib -type f -newer $(APP)/EXPECT | grep -v ".git" | sort | diff $(APP)/EXPECT -
 	$t rm $(APP)/EXPECT
 
+core-deps-dep-built-force-full: init
+
+	$i "Bootstrap a new OTP library named $(APP)"
+	$t mkdir $(APP)/
+	$t cp ../erlang.mk $(APP)/
+	$t $(MAKE) -C $(APP) -f erlang.mk bootstrap-lib $v
+
+	$i "Add cowlib to the list of dependencies"
+	$t perl -ni.bak -e 'print;if ($$.==1) {print "DEPS = cowlib\n"}' $(APP)/Makefile
+
+	$i "Build the application"
+	$t $(MAKE) -C $(APP) $v
+
+	$i "Touch one cowlib file to mark it for recompilation"
+	$t $(SLEEP)
+	$t touch $(APP)/deps/cowlib/src/cow_http.erl
+
+	$i "Check that cowlib is not rebuilt if \`force_rebuild_dep\` returns false"
+	$t touch $(APP)/EXPECT
+	$t $(SLEEP)
+	$t $(MAKE) -C $(APP) force_rebuild_dep='test $$(1) != $(CURDIR)/$(APP)/deps/cowlib' $v
+	$t find $(APP)/deps/cowlib -type f -newer $(APP)/EXPECT | sort | diff $(APP)/EXPECT -
+	$t rm $(APP)/EXPECT
+
+	$i "Check that cowlib is rebuilt if \`force_rebuild_dep\` returns true"
+	$t printf "%s\n" \
+		$(APP)/deps/cowlib/cowlib.d \
+		$(APP)/deps/cowlib/ebin/cowlib.app \
+		$(APP)/deps/cowlib/ebin/cow_http.beam \
+		$(APP)/deps/cowlib/ebin/dep_built | sort > $(APP)/EXPECT
+	$t $(SLEEP)
+	$t $(MAKE) -C $(APP) force_rebuild_dep='test $$(1) = $(CURDIR)/$(APP)/deps/cowlib' $v
+# Files in .git might end up modified due to the id generation in the .app file.
+	$t find $(APP)/deps/cowlib -type f -newer $(APP)/EXPECT | grep -v ".git" | sort | diff $(APP)/EXPECT -
+	$t rm $(APP)/EXPECT
+
+	$i "Touch one cowlib file to mark it for recompilation"
+	$t $(SLEEP)
+	$t touch $(APP)/deps/cowlib/src/cow_http.erl
+
+	$i "Check that cowlib is not rebuilt if \`FORCE_REBUILD\` is empty"
+	$t touch $(APP)/EXPECT
+	$t $(SLEEP)
+	$t $(MAKE) -C $(APP) FORCE_REBUILD= $v
+	$t find $(APP)/deps/cowlib -type f -newer $(APP)/EXPECT | sort | diff $(APP)/EXPECT -
+	$t rm $(APP)/EXPECT
+
+	$i "Check that cowlib is not rebuilt if \`FORCE_REBUILD\` does not mention cowlib"
+	$t touch $(APP)/EXPECT
+	$t $(SLEEP)
+	$t $(MAKE) -C $(APP) FORCE_REBUILD='other_dep' $v
+	$t find $(APP)/deps/cowlib -type f -newer $(APP)/EXPECT | sort | diff $(APP)/EXPECT -
+	$t rm $(APP)/EXPECT
+
+	$i "Check that cowlib is rebuilt if \`FORCE_REBUILD\` contains cowlib"
+	$t printf "%s\n" \
+		$(APP)/deps/cowlib/cowlib.d \
+		$(APP)/deps/cowlib/ebin/cowlib.app \
+		$(APP)/deps/cowlib/ebin/cow_http.beam \
+		$(APP)/deps/cowlib/ebin/dep_built | sort > $(APP)/EXPECT
+	$t $(SLEEP)
+	$t $(MAKE) -C $(APP) FORCE_REBUILD='other_dep cowlib' $v
+# Files in .git might end up modified due to the id generation in the .app file.
+	$t find $(APP)/deps/cowlib -type f -newer $(APP)/EXPECT | grep -v ".git" | sort | diff $(APP)/EXPECT -
+	$t rm $(APP)/EXPECT
+
 core-deps-dep-built-ln: init
 
 	$i "Bootstrap a new OTP library named $(APP)"
@@ -194,6 +260,10 @@ core-deps-dep-built-ln: init
 	$i "Build the application"
 	$t $(MAKE) -C $(APP) $v
 
+# On MSYS2 "ln" will by default not create symbolic links because
+# it requires an option to be enabled and administrative privileges.
+# The "rebuild" part of the test is therefore skipped on Windows.
+ifneq ($(PLATFORM),msys2)
 	$i "Touch one cowlib file to mark it for recompilation"
 	$t $(SLEEP)
 	$t touch $(APP)/deps/cowlib/src/cow_http.erl
@@ -203,11 +273,13 @@ core-deps-dep-built-ln: init
 		$(APP)/cowlib/cowlib.d \
 		$(APP)/cowlib/ebin/cowlib.app \
 		$(APP)/cowlib/ebin/cow_http.beam | sort > $(APP)/EXPECT
+
 	$t $(SLEEP)
 	$t $(MAKE) -C $(APP) $v
 # Files in .git might end up modified due to the id generation in the .app file.
 	$t find $(APP)/cowlib -type f -newer $(APP)/EXPECT | grep -v ".git" | sort | diff $(APP)/EXPECT -
 	$t rm $(APP)/EXPECT
+endif
 
 core-deps-dep-commit: init
 
@@ -825,6 +897,113 @@ dep_shelldep = git file://$(abspath $(APP)_shelldep) master\
 	$t cmp $(APP)/expected-all-deps.txt $(APP)/.erlang.mk/recursive-deps-list.log
 	$t $(MAKE) -C $(APP) --no-print-directory distclean $v
 
+core-deps-list-deps-with-apps: init
+
+# We pass $(MAKE) directly so that GNU Make can pass its context forward.
+# If we didn't then $(MAKE) would be expanded in the call without context.
+	$(call add_dep_and_subdep,,$(MAKE))
+
+	$i "Bootstrap a new OTP library named $(APP)"
+	$t mkdir $(APP)/
+	$t cp ../erlang.mk $(APP)/
+	$t $(MAKE) -C $(APP) -f erlang.mk bootstrap-lib $v
+
+	$i "Bootstrap another APP named $(APP)_app in $(APP) repository"
+	$t $(MAKE) -C $(APP) --no-print-directory new-lib in=my_app $v
+
+	$i "Bootstrap another APP named $(APP)_dep_app in $(APP)_dep repository"
+	$t $(MAKE) -C $(APP)_dep --no-print-directory new-lib in=my_dep_app $v
+	$t sed -i.bak '2i\
+APPS_DIR := $$(CURDIR)/apps\
+LOCAL_DEPS = my_dep_app ssl\
+' $(APP)_dep/Makefile
+	$t echo 'unexport APPS_DIR' >> $(APP)_dep/Makefile
+	$t rm $(APP)_dep/Makefile.bak
+	$t cd $(APP)_dep && git add .
+	$t cd $(APP)_dep && git commit -q --no-gpg-sign -m "Add application"
+
+	$i "Add $(APP)-dep as a dependency"
+	$t sed -i.bak '2i\
+DEPS = dep\
+dep_dep = git file://$(abspath $(APP)_dep) master\
+' $(APP)/Makefile
+	$t rm $(APP)/Makefile.bak
+
+	$i "Create a Git repository for $(APP)"
+	$t (cd $(APP) && \
+		git init -q && \
+		git config user.name "Testsuite" && \
+		git config user.email "testsuite@erlang.mk" && \
+		git add . && \
+		git commit -q --no-gpg-sign -m "Initial commit")
+
+	$i "List application dependencies ($(APP)_app is missing)"
+	$t $(MAKE) -C $(APP) --no-print-directory list-deps $v
+	$t test -d $(APP)/deps/subdep
+	$t printf "%s\n%s\n%s\n" $(abspath $(APP)/deps/dep $(APP)/deps/dep/apps/my_dep_app $(APP)/deps/subdep) > $(APP)/expected-deps.txt
+	$t cmp $(APP)/expected-deps.txt $(APP)/.erlang.mk/recursive-deps-list.log
+	$t $(MAKE) -C $(APP) --no-print-directory distclean $v
+
+	$i "Add $(APP)_app as a dependency"
+	$t sed -i.bak '3i\
+LOCAL_DEPS = my_app\
+' $(APP)/Makefile
+	$t rm $(APP)/Makefile.bak
+
+	$i "List application dependencies ($(APP)_app is listed)"
+	$t $(MAKE) -C $(APP) --no-print-directory list-deps $v
+	$t test -d $(APP)/deps/subdep
+	$t printf "%s\n%s\n%s\n%s\n" $(abspath $(APP)/apps/my_app $(APP)/deps/dep $(APP)/deps/dep/apps/my_dep_app $(APP)/deps/subdep) > $(APP)/expected-deps.txt
+	$t cmp $(APP)/expected-deps.txt $(APP)/.erlang.mk/recursive-deps-list.log
+	$t $(MAKE) -C $(APP) --no-print-directory distclean $v
+
+core-deps-list-deps-with-specified-full-var: init
+
+# We pass $(MAKE) directly so that GNU Make can pass its context forward.
+# If we didn't then $(MAKE) would be expanded in the call without context.
+	$(call add_dep_and_subdep,,$(MAKE))
+
+	$i "Bootstrap a new OTP library named $(APP)"
+	$t mkdir $(APP)/
+	$t cp ../erlang.mk $(APP)/
+	$t $(MAKE) -C $(APP) -f erlang.mk bootstrap-lib $v
+
+	$i "Add $(APP)-dep as a dependency"
+	$t sed -i.bak '2i\
+DEPS = dep\
+dep_dep = git file://$(abspath $(APP)_dep) master\
+' $(APP)/Makefile
+	$t rm $(APP)/Makefile.bak
+
+	$i "Create a Git repository for $(APP)"
+	$t (cd $(APP) && \
+		git init -q && \
+		git config user.name "Testsuite" && \
+		git config user.email "testsuite@erlang.mk" && \
+		git add . && \
+		git commit -q --no-gpg-sign -m "Initial commit")
+
+	$i "Build application"
+	$t $(MAKE) -C $(APP) --no-print-directory $v
+	$t test -d $(APP)/deps/subdep
+
+	$i "List application dependencies without FULL"
+	$t $(MAKE) -C $(APP) --no-print-directory list-deps $v
+	$t printf "%s\n%s\n" $(abspath $(APP)/deps/dep $(APP)/deps/subdep) > $(APP)/expected-deps.txt
+	$t cmp $(APP)/expected-deps.txt $(APP)/.erlang.mk/recursive-deps-list.log
+
+	$i "List application dependencies with empty FULL"
+	$t $(MAKE) -C $(APP) --no-print-directory list-deps FULL= $v
+	$t printf "%s\n%s\n" $(abspath $(APP)/deps/dep $(APP)/deps/subdep) > $(APP)/expected-deps.txt
+	$t cmp $(APP)/expected-deps.txt $(APP)/.erlang.mk/recursive-deps-list.log
+
+	$i "List application dependencies with FULL=1"
+	$t $(MAKE) -C $(APP) --no-print-directory list-deps FULL=1 $v
+	$t printf "%s\n%s\n" $(abspath $(APP)/deps/dep $(APP)/deps/subdep) > $(APP)/expected-deps.txt
+	$t cmp $(APP)/expected-deps.txt $(APP)/.erlang.mk/recursive-deps-list.log
+
+	$t $(MAKE) -C $(APP) --no-print-directory distclean $v
+
 core-deps-makefile-change: init
 
 	$i "Bootstrap a new OTP application named $(APP)"
@@ -866,7 +1045,8 @@ core-deps-dep-makefile-change: init
 	$t $(MAKE) -C $(APP)/my_dep/ -f erlang.mk bootstrap-lib $v
 
 	$i "Add my_dep to the list of dependencies"
-	$t perl -ni.bak -e 'print;if ($$.==1) {print "DEPS = my_dep\ndep_my_dep = ln $(CURDIR)/$(APP)/my_dep/\n"}' $(APP)/Makefile
+# We use FORCE_REBUILD to ensure it gets rebuilt even on Windows.
+	$t perl -ni.bak -e "print;if ($$.==1) {print \"DEPS = my_dep\ndep_my_dep = ln $(CURDIR)/$(APP)/my_dep/\nFORCE_REBUILD = my_dep\n\"}" $(APP)/Makefile
 
 ifdef LEGACY
 	$i "Add my_dep to the applications key in the .app.src file"
@@ -877,18 +1057,18 @@ endif
 	$t $(MAKE) -C $(APP) NO_AUTOPATCH=my_dep $v
 
 	$i "Add Cowlib to the list of dependencies in my_dep"
-	$t perl -ni.bak -e 'print;if ($$.==1) {print "DEPS = cowlib\n"}' $(APP)/my_dep/Makefile
+	$t perl -ni.bak -e 'print;if ($$.==1) {print "DEPS = cowlib\ndep_cowlib_commit = master\n"}' $(APP)/deps/my_dep/Makefile
 
 ifdef LEGACY
 	$i "Add Cowlib to the applications key in my_dep's .app.src file"
-	$t perl -ni.bak -e 'print;if ($$.==7) {print "\t\tcowlib,\n"}' $(APP)/my_dep/src/my_dep.app.src
+	$t perl -ni.bak -e 'print;if ($$.==7) {print "\t\tcowlib,\n"}' $(APP)/deps/my_dep/src/my_dep.app.src
 endif
 
 	$i "Build the application again"
 	$t $(MAKE) -C $(APP) $v
 
 	$i "Check that Cowlib was included in my_dep's .app file"
-	$t $(ERL) -pa $(APP)/my_dep/ebin/ -eval " \
+	$t $(ERL) -pa $(APP)/deps/my_dep/ebin/ -eval " \
 		ok = application:load(my_dep), \
 		{ok, Apps} = application:get_key(my_dep, applications), \
 		true = lists:member(cowlib, Apps), \
