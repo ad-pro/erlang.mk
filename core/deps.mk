@@ -664,8 +664,8 @@ endef
 # and remove the cloned repo.
 
 define dep_fetch_fossil
-    rm -f -r ./_tmp_fossil_/$(call dep_name,$(1)); \
-    mkdir -p ./_tmp_fossil_/$(call dep_name,$(1)); \
+    rm -f -r $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1)); \
+    mkdir -p $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1)); \
     cd ./_tmp_fossil_/$(call dep_name,$(1)); \
     fossil clone $(call dep_repo,$(1)) ./$(call dep_name,$(1)).fossil; \
     fossil open  --nested $(call dep_name,$(1)).fossil ;\
@@ -675,8 +675,8 @@ define dep_fetch_fossil
     rm -f _FOSSIL_; \
     cd ../..; \
     mkdir -p $(DEPS_DIR)/$(call dep_name,$(1)); \
-    cp -R ./_tmp_fossil_/$(call dep_name,$(1)) $(DEPS_DIR); \
-    rm -f -r ./_tmp_fossil_/$(call dep_name,$(1));
+    cp -R $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1)) $(DEPS_DIR); \
+    rm -f -r $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1));
 endef
 
 # Fetch data from local fossil repository.
