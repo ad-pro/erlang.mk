@@ -642,7 +642,7 @@ endef
 define dep_fetch_fossil
     rm -f -r $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1)); \
     mkdir -p $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1)); \
-    cd ./_tmp_fossil_/$(call dep_name,$(1)); \
+    cd $(ERLANG_MK_TMP)/_tmp_fossil_/$(call dep_name,$(1)); \
     fossil clone $(call dep_repo,$(1)) ./$(call dep_name,$(1)).fossil; \
     fossil open  --nested $(call dep_name,$(1)).fossil ;\
     fossil update  $(call dep_commit,$(1)); \
